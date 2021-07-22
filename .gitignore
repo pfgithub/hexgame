@@ -1,0 +1,5 @@
+lib/
+zig
+deps/
+zig-out/
+zig-cache/
