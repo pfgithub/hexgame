@@ -43,25 +43,34 @@ pub fn main() !void {
   ray.InitWindow(window_w, window_h, "sample");
   
   const texture = ray.LoadTexture("src/img/pixil-frame-0.png");
+  const cursor = ray.LoadTexture("src/img/image0004.png");
   
   ray.SetTargetFPS(60);
   
+  ray.DisableCursor();
+  
   while(!ray.WindowShouldClose()) {
+    const offset = ray.GetMousePosition();
+  
     ray.BeginDrawing(); {
       ray.ClearBackground(ray.RAYWHITE);
       
-      const scale = 2;
+      const scale = 4;
       var yi: usize = 0;
       var i: u5 = 0;
       while(yi < 10) : (yi += 1) {
         var xi: usize = 0;
         while(xi < 10) : (xi += 1) {
+        
           var x = @intToFloat(f32, xi * 15 * scale);
-          const y = @intToFloat(f32, yi * 9 * scale);
+          var y = @intToFloat(f32, yi * 9 * scale);
           
           if(yi % 2 == 1) {
             x += 7 * scale;
           }
+          
+          x -= offset.x;
+          y -= offset.y;
           
           const tile_coords = @intToEnum(Tile, i).toMiniCoords();
           ray._wDrawTexturePro(
@@ -77,10 +86,18 @@ pub fn main() !void {
           i %= @as(comptime_int, std.meta.fields(Tile).len);
         }
       }
+
+      ray._wDrawTexturePro(
+        &cursor,
+        &.{.x = 0, .y = 0, .width = 64, .height = 64},
+        &.{.x = (window_w / 2) - (64 / 2), .y = (window_h / 2) - (64 / 2), .width = 64, .height = 64},
+        &.{.x = 0, .y = 0},
+        0,
+        &ray.WHITE,
+      );
     } ray.EndDrawing();
   }
 }
 
-// I want to make a thing so it captures mouse
-// movement and when I move my mouse it moves it on screen
-// and animates towards the center
+// TODO rather than locking the cursor at the center,
+// have it animate towards the center or something
