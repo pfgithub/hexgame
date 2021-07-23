@@ -277,7 +277,8 @@ pub fn main() !void {
         .x = (window_w / 2) + cursor_pos.x,
         .y = (window_h / 2) + cursor_pos.y,
       };
-      ray._wDrawTexturePro(
+      _ = cursor;
+      if(false) ray._wDrawTexturePro(
         &cursor,
         &.{.x = 0, .y = 0, .width = 64, .height = 64},
         &.{.x = m_screen_pos.x - (64 / 2), .y = m_screen_pos.y - (64 / 2), .width = 64, .height = 64},
@@ -289,7 +290,14 @@ pub fn main() !void {
       const m_world_pos_f = camera.screenToWorld(m_screen_pos);
       const m_world_pos = floatFloorToInt(m_world_pos_f);
       
-      const selected_tile = camera.worldToScreen(@floor(m_world_pos_f));
+      const shift1 = m_world_pos_f - @floor(m_world_pos_f);
+      const pow = 0.3;
+      const one: TilePosFloat = .{1, 1};
+      const shift = vecpow(shift1, pow) / (vecpow(shift1, pow) + vecpow(one - shift1, pow));
+      
+      const selected_tile = camera.worldToScreen(
+        @floor(m_world_pos_f) + (shift - @as(TilePosFloat, .{0.5, 0.5}))
+      );
       const scale = camera.step();
       ray._wDrawRectangleRec(
         &.{.x = selected_tile.x, .y = selected_tile.y, .width = scale.x, .height = scale.y},
@@ -302,6 +310,10 @@ pub fn main() !void {
       ) catch @panic("oom"), 10, 10, 20, ray.WHITE);
     } ray.EndDrawing();
   }
+}
+
+fn vecpow(x: TilePosFloat, y: f32) TilePosFloat {
+  return .{std.math.pow(f32, x[0], y), std.math.pow(f32, x[1], y)};
 }
 
 // TODO rather than locking the cursor at the center,
