@@ -3,16 +3,17 @@ const ray = @import("raylib.zig");
 
 const TileEdges = [4]Tile; // ul ur bl br
 const Tile = enum{
+  grass,
+  dirt,
+  dark_dirt,
+  stone,
+  unloaded, // area that hasn't been loaded
   /// eg a tile could be [grass, grass, empty, empty] and it
   /// can be used for any transition involving [grass, grass, *, *]
   /// and it should pick which order to try * in based on this
   /// enum order probably so you don't end up with dirt above a grass
   /// transition
   empty,
-  grass,
-  dirt,
-  dark_dirt,
-  stone,
 };
 
 const TileMap = struct {
@@ -101,18 +102,34 @@ const TileSize = enum{
   }
 };
 
+const Chunk = [128*128]Tile;
+
 const Surface = struct {
+  alloc: *std.mem.Allocator,
+  chunk: *Chunk,
   // contains chunks which have
   // a bunch of tiles and any associated tile
   // data if needed
-  pub fn getTile(_: Surface, pos: TilePos) Tile {
-    if(@mod(pos[0], 5) <= 1 and @mod(pos[1], 7) == 1) {
-      return Tile.grass;
+  pub fn init(alloc: *std.mem.Allocator) Surface {
+    const root_chunk = alloc.create(Chunk) catch @panic("oom");
+    for(root_chunk) |*tile| tile.* = .grass;
+    return .{
+      .alloc = alloc,
+      .chunk = root_chunk,
+    };
+  }
+  pub fn getTile(surface: Surface, pos: TilePos) Tile {
+    if(pos[0] < 0 or pos[0] >= 128 or pos[1] < 0 or pos[1] >= 128) {
+      return .unloaded;
     }
-    if(@mod(pos[0], 4) == 0 and @mod(pos[1], 5) <= 2) {
-      return Tile.dirt;
+    return surface.chunk[@intCast(usize, pos[1] * 128 + pos[0])];
+  }
+  pub fn setTile(surface: *Surface, pos: TilePos, tile: Tile) bool {
+    if(pos[0] < 0 or pos[0] >= 128 or pos[1] < 0 or pos[1] >= 128) {
+      return false;
     }
-    return Tile.dark_dirt;
+    surface.chunk[@intCast(usize, pos[1] * 128 + pos[0])] = tile;
+    return true;
   }
   pub fn getCorners(surface: Surface, pos: TilePos) TileEdges {
     return .{
@@ -276,7 +293,7 @@ pub fn main() !void {
   
   ray.DisableCursor();
   
-  var surface = Surface{};
+  var surface = Surface.init(alloc);
   var camera = Camera{
     .pixel_size = 4,
     .tile_size = .mini,
@@ -383,6 +400,19 @@ pub fn main() !void {
         "{}\n{}",
         .{m_world_pos, surface.getTile(m_world_pos)},
       ) catch @panic("oom"), 10, 10, 20, ray.WHITE);
+      
+      if(ray.IsMouseButtonPressed(ray.MOUSE_BUTTON_LEFT)) {
+        const ctile = surface.getTile(m_world_pos);
+        const ntile: Tile = switch(ctile) {
+          .grass => .stone,
+          .stone => .dirt,
+          .dirt => .dark_dirt,
+          else => .grass,
+        };
+        if(!surface.setTile(m_world_pos, ntile)) {
+          std.log.info("Could not set tile", .{});
+        }
+      }
     } ray.EndDrawing();
   }
 }
