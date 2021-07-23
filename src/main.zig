@@ -106,10 +106,10 @@ const Surface = struct {
   // a bunch of tiles and any associated tile
   // data if needed
   pub fn getTile(_: Surface, pos: TilePos) Tile {
-    if(@mod(pos.x, 5) <= 1 and @mod(pos.y, 7) == 1) {
+    if(@mod(pos[0], 5) <= 1 and @mod(pos[1], 7) == 1) {
       return Tile.dark_dirt;
     }
-    if(@mod(pos.x, 4) == 0 and @mod(pos.y, 5) <= 2) {
+    if(@mod(pos[0], 4) == 0 and @mod(pos[1], 5) <= 2) {
       return Tile.dirt;
     }
     return Tile.grass;
@@ -117,17 +117,21 @@ const Surface = struct {
   pub fn getCorners(surface: Surface, pos: TilePos) TileEdges {
     return .{
       surface.getTile(pos),
-      surface.getTile(.{.x = pos.x + 1, .y = pos.y}),
-      surface.getTile(.{.x = pos.x, .y = pos.y + 1}),
-      surface.getTile(.{.x = pos.x + 1, .y = pos.y + 1}),
+      surface.getTile(pos + @as(TilePos, .{1, 0})),
+      surface.getTile(pos + @as(TilePos, .{0, 1})),
+      surface.getTile(pos + @as(TilePos, .{1, 1})),
     };
   }
 };
 
-const TilePos = struct {
-  x: i32,
-  y: i32,
-};
+const TilePos = std.meta.Vector(2, i32);
+const TilePosFloat = std.meta.Vector(2, f32);
+pub fn floatFloorToInt(float: TilePosFloat) TilePos {
+  return .{
+    @floatToInt(i32, @floor(float[0])),
+    @floatToInt(i32, @floor(float[1])),
+  };
+}
 const TileRect = struct {
   x: i32,
   y: i32,
@@ -151,9 +155,22 @@ const Camera = struct {
     const tile_step = camera.step();
     const x_count = @floatToInt(i32, @ceil(dest.width / tile_step.x));
     const y_count = @floatToInt(i32, @ceil(dest.height / tile_step.y));
-    const x_start = @floatToInt(i32, (camera.pixel_offset.x + dest.x) / tile_step.x);
-    const y_start = @floatToInt(i32, (camera.pixel_offset.y + dest.y) / tile_step.y);
-    return .{.x = x_start - 1, .y = y_start - 1, .w = x_count + 2, .h = y_count + 2};
+    const pos_start = floatFloorToInt(camera.screenToWorld(.{.x = dest.x, .y = dest.y}));
+    return .{.x = pos_start[0] - 1, .y = pos_start[1] - 1, .w = x_count + 2, .h = y_count + 2};
+  }
+  pub fn worldToScreen(camera: Camera, world: TilePosFloat) ray.Vector2 {
+    const tile_step = camera.step();
+    return .{
+      .x = (tile_step.x * world[0]) - camera.pixel_offset.x,
+      .y = (tile_step.y * world[1]) - camera.pixel_offset.y,
+    };
+  }
+  pub fn screenToWorld(camera: Camera, screen: ray.Vector2) TilePosFloat {
+    const tile_step = camera.step();
+    return .{
+      (camera.pixel_offset.x + screen.x) / tile_step.x,
+      (camera.pixel_offset.y + screen.y) / tile_step.y,
+    };
   }
 };
 
@@ -172,8 +189,8 @@ pub fn renderSurface(
     var xi: i32 = range.x;
     while(xi < range.x + range.w) : (xi += 1) {
     
-      var x = @intToFloat(f32, xi) * tile_step.x;
-      var y = @intToFloat(f32, yi) * tile_step.y;
+      var x = @intToFloat(f32, xi + 1) * tile_step.x;
+      var y = @intToFloat(f32, yi + 1) * tile_step.y;
       
       x -= camera.pixel_offset.x;
       y -= camera.pixel_offset.y;
@@ -181,7 +198,7 @@ pub fn renderSurface(
       x -= dest.x;
       y -= dest.y;
       
-      const variant = map.get(surface.getCorners(.{.x = xi, .y = yi}));
+      const variant = map.get(surface.getCorners(.{xi, yi}));
       const tile_src = ray.Rectangle{
         .x = @intToFloat(f32, variant.x) * 16,
         .y = @intToFloat(f32, variant.y) * 16,
@@ -225,13 +242,25 @@ pub fn main() !void {
   };
   
   var prev_pos = ray.GetMousePosition();
+  var cursor_pos: ray.Vector2 = .{.x = 0, .y = 0};
   
   while(!ray.WindowShouldClose()) {
+    var frame_arena = std.heap.ArenaAllocator.init(alloc);
+    const arena = &frame_arena.allocator;
+    _ = arena;
+  
     const curr_pos = ray.GetMousePosition();
     const offset = ray.Vector2{.x = curr_pos.x - prev_pos.x, .y = curr_pos.y - prev_pos.y};
     prev_pos = curr_pos;
     
-    camera.move(offset);
+    cursor_pos.x += offset.x;
+    cursor_pos.y += offset.y;
+    const speed = 1;
+    const move_x = @ceil(cursor_pos.x * speed);
+    const move_y = @ceil(cursor_pos.y * speed);
+    camera.move(.{.x = move_x, .y = move_y});
+    cursor_pos.x -= move_x;
+    cursor_pos.y -= move_y;
   
     ray.BeginDrawing(); {
       ray.ClearBackground(ray.RAYWHITE);
@@ -244,14 +273,33 @@ pub fn main() !void {
         tile_map,
       );
 
+      const m_screen_pos: ray.Vector2 = .{
+        .x = (window_w / 2) + cursor_pos.x,
+        .y = (window_h / 2) + cursor_pos.y,
+      };
       ray._wDrawTexturePro(
         &cursor,
         &.{.x = 0, .y = 0, .width = 64, .height = 64},
-        &.{.x = (window_w / 2) - (64 / 2), .y = (window_h / 2) - (64 / 2), .width = 64, .height = 64},
+        &.{.x = m_screen_pos.x - (64 / 2), .y = m_screen_pos.y - (64 / 2), .width = 64, .height = 64},
         &.{.x = 0, .y = 0},
         0,
         &ray.WHITE,
       );
+      
+      const m_world_pos_f = camera.screenToWorld(m_screen_pos);
+      const m_world_pos = floatFloorToInt(m_world_pos_f);
+      
+      const selected_tile = camera.worldToScreen(@floor(m_world_pos_f));
+      const scale = camera.step();
+      ray._wDrawRectangleRec(
+        &.{.x = selected_tile.x, .y = selected_tile.y, .width = scale.x, .height = scale.y},
+        &.{.r = 255, .g = 255, .b = 255, .a = 128},
+      );
+      
+      ray.DrawText(std.fmt.allocPrint0(arena,
+        "{}\n{}",
+        .{m_world_pos, surface.getTile(m_world_pos)},
+      ) catch @panic("oom"), 10, 10, 20, ray.WHITE);
     } ray.EndDrawing();
   }
 }

@@ -17,3 +17,8 @@ void _wDrawTexturePro(
 	DrawTexturePro(*texture, *source, *dest, *origin, rotation, *tint);
 })
 
+void _wDrawRectangleRec(
+	const Rectangle* rec, const Color* color
+) IMPL({
+	DrawRectangleRec(*rec, *color);
+})
