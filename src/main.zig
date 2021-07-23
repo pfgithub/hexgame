@@ -6,7 +6,7 @@ const Tile = enum{
   grass,
   dirt,
   dark_dirt,
-  stone,
+  water,
   /// area that hasn't been loaded
   unloaded,
   /// eg a tile could be [grass, grass, empty, empty] and it
@@ -84,9 +84,9 @@ pub fn add6x6(map: *TileMap, start: TileMap.TileVariant, tiles: [2]Tile) void {
 
 pub fn createTileMap(map: *TileMap) void {
   add6x6(map, .{.x = 0, .y = 0}, .{.dirt, .grass});
-  add6x6(map, .{.x = 0, .y = 6}, .{.stone, .grass});
+  add6x6(map, .{.x = 0, .y = 6}, .{.water, .grass});
   add6x6(map, .{.x = 7, .y = 0}, .{.dark_dirt, .dirt});
-  add6x6(map, .{.x = 7, .y = 6}, .{.stone, .dirt});
+  add6x6(map, .{.x = 7, .y = 6}, .{.water, .dirt});
   add6x6(map, .{.x = 13, .y = 0}, .{.dark_dirt, .grass});
   add6x6(map, .{.x = 0, .y = 12}, .{.any_below, .grass});
   add6x6(map, .{.x = 6, .y = 12}, .{.any_below, .dirt});
@@ -414,8 +414,8 @@ pub fn main() !void {
         const ctile = surface.getTile(m_world_pos);
         const ntile: Tile = switch(ctile) {
           .grass => .dirt,
-          .dirt => .stone,
-          .stone => .any_below,
+          .dirt => .water,
+          .water => .any_below,
           else => .grass,
         };
         if(!surface.setTile(m_world_pos, ntile)) {
