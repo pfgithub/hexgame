@@ -7,13 +7,19 @@ const Tile = enum{
   dirt,
   dark_dirt,
   stone,
-  unloaded, // area that hasn't been loaded
+  /// area that hasn't been loaded
+  unloaded,
   /// eg a tile could be [grass, grass, empty, empty] and it
   /// can be used for any transition involving [grass, grass, *, *]
   /// and it should pick which order to try * in based on this
   /// enum order probably so you don't end up with dirt above a grass
   /// transition
-  empty,
+  /// in addition to empty, there can be like a "any"
+  /// eg at the edge of the world you could make a neat effect
+  /// where it looks like a 3d pit but for any material, so
+  /// you need a tile that says "anything is above this"
+  any_above,
+  any_below,
 };
 
 const TileMap = struct {
@@ -82,7 +88,10 @@ pub fn createTileMap(map: *TileMap) void {
   add6x6(map, .{.x = 7, .y = 0}, .{.dark_dirt, .dirt});
   add6x6(map, .{.x = 7, .y = 6}, .{.stone, .dirt});
   add6x6(map, .{.x = 13, .y = 0}, .{.dark_dirt, .grass});
+  add6x6(map, .{.x = 0, .y = 12}, .{.any_below, .grass});
+  add6x6(map, .{.x = 6, .y = 12}, .{.any_below, .dirt});
   map.add(.{.grass, .grass, .grass, .grass}, &.{.{.x = 6, .y = 6}});
+  map.add(.{.unloaded, .unloaded, .unloaded, .unloaded}, &.{.{.x = 23, .y = 0}});
   // would like to have everything→air in here, it'd be useful
   // also, to make this in-program rather than using
   // a fn like createTileMap, you would basically paint
@@ -404,9 +413,9 @@ pub fn main() !void {
       if(ray.IsMouseButtonPressed(ray.MOUSE_BUTTON_LEFT)) {
         const ctile = surface.getTile(m_world_pos);
         const ntile: Tile = switch(ctile) {
-          .grass => .stone,
-          .stone => .dirt,
-          .dirt => .dark_dirt,
+          .grass => .dirt,
+          .dirt => .stone,
+          .stone => .any_below,
           else => .grass,
         };
         if(!surface.setTile(m_world_pos, ntile)) {
