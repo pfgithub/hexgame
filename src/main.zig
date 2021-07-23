@@ -32,13 +32,13 @@ const TileMap = struct {
     }
     entry.value_ptr.appendSlice(map.data.allocator, values) catch @panic("oom");
   }
-  fn get(map: TileMap, edges: TileEdges) TileVariant {
+  fn get(map: TileMap, edges: TileEdges) []TileVariant {
     // todo support air and variants and stuff
     const found = map.data.get(edges);
     if(found == null or found.?.items.len == 0) {
-      return .{.x = 20, .y = 7};
+      return &[_]TileVariant{};
     }
-    return found.?.items[0];
+    return found.?.items;
   }
 };
 
@@ -107,12 +107,12 @@ const Surface = struct {
   // data if needed
   pub fn getTile(_: Surface, pos: TilePos) Tile {
     if(@mod(pos[0], 5) <= 1 and @mod(pos[1], 7) == 1) {
-      return Tile.dark_dirt;
+      return Tile.grass;
     }
     if(@mod(pos[0], 4) == 0 and @mod(pos[1], 5) <= 2) {
       return Tile.dirt;
     }
-    return Tile.grass;
+    return Tile.dark_dirt;
   }
   pub fn getCorners(surface: Surface, pos: TilePos) TileEdges {
     return .{
@@ -198,21 +198,63 @@ pub fn renderSurface(
       x -= dest.x;
       y -= dest.y;
       
-      const variant = map.get(surface.getCorners(.{xi, yi}));
-      const tile_src = ray.Rectangle{
-        .x = @intToFloat(f32, variant.x) * 16,
-        .y = @intToFloat(f32, variant.y) * 16,
-        .width = 16,
-        .height = 16,
+      const tile_pos: ray.Rectangle = .{
+        .x = x - (tile_step.x / 2),
+        .y = y - (tile_step.y / 2),
+        .width = tile_step.x,
+        .height = tile_step.y,
       };
-      ray._wDrawTexturePro(
-        &texture,
-        &tile_src,
-        &.{.x = x - (tile_step.x / 2), .y = y - (tile_step.y / 2), .width = tile_step.x, .height = tile_step.y},
-        &.{.x = 0, .y = 0},
-        0,
-        &ray.WHITE,
-      );
+      
+      const corners = surface.getCorners(.{xi, yi});
+      const variants = map.get(corners);
+      if(variants.len > 0) {
+        const variant = variants[0];
+        const tile_src = ray.Rectangle{
+          .x = @intToFloat(f32, variant.x) * 16,
+          .y = @intToFloat(f32, variant.y) * 16,
+          .width = 16,
+          .height = 16,
+        };
+        ray._wDrawTexturePro(
+          &texture,
+          &tile_src,
+          &tile_pos,
+          &.{.x = 0, .y = 0},
+          0,
+          &ray.WHITE,
+        );
+      }else{
+        // TODO in order of highest to lowest, try rendering
+        // each layer as only the current layer + air tiles
+        // and then for the bottom layer, render all four corners
+        // as that item.
+        // (highest is highest in the enum)
+        for(corners) |corner, i| {
+          const materials = map.get(.{corner, corner, corner, corner});
+          if(materials.len == 0) continue;
+          const material = materials[0];
+          const ix = @intToFloat(f32, i % 2);
+          const iy = @intToFloat(f32, i / 2);
+          ray._wDrawTexturePro(
+            &texture,
+            &ray.Rectangle{
+              .x = @intToFloat(f32, material.x) * 16 + (ix * 8),
+              .y = @intToFloat(f32, material.y) * 16 + (iy * 8),
+              .width = 8,
+              .height = 8,
+            },
+            &.{
+              .x = tile_pos.x + (ix * (tile_step.x / 2)),
+              .y = tile_pos.y + (iy * (tile_step.y / 2)),
+              .width = tile_pos.width / 2,
+              .height = tile_pos.height / 2,
+            },
+            &.{.x = 0, .y = 0},
+            0,
+            &ray.WHITE,
+          );
+        }
+      }
     }
   }
 }
