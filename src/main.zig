@@ -255,12 +255,45 @@ pub fn main() !void {
     
     cursor_pos.x += offset.x;
     cursor_pos.y += offset.y;
-    const speed = 1;
-    const move_x = @ceil(cursor_pos.x * speed);
-    const move_y = @ceil(cursor_pos.y * speed);
-    camera.move(.{.x = move_x, .y = move_y});
-    cursor_pos.x -= move_x;
-    cursor_pos.y -= move_y;
+    const speed = 0.2;
+    const safe_area_w = window_w / 3;
+    const safe_area_h = window_h / 3;
+    if(cursor_pos.x > safe_area_w) {
+      cursor_pos.x -= safe_area_w;
+      
+      const move_x = @ceil(cursor_pos.x * speed);
+      camera.move(.{.x = move_x, .y = 0});
+      cursor_pos.x -= move_x;
+      
+      cursor_pos.x += safe_area_w;
+    }
+    if(cursor_pos.y > safe_area_h) {
+      cursor_pos.y -= safe_area_h;
+      
+      const move_y = @ceil(cursor_pos.y * speed);
+      camera.move(.{.x = 0, .y = move_y});
+      cursor_pos.y -= move_y;
+      
+      cursor_pos.y += safe_area_h;
+    }
+    if(cursor_pos.x < -safe_area_w) {
+      cursor_pos.x += safe_area_w;
+      
+      const move_x = @ceil(cursor_pos.x * speed);
+      camera.move(.{.x = move_x, .y = 0});
+      cursor_pos.x -= move_x;
+      
+      cursor_pos.x -= safe_area_w;
+    }
+    if(cursor_pos.y < -safe_area_h) {
+      cursor_pos.y += safe_area_h;
+      
+      const move_y = @ceil(cursor_pos.y * speed);
+      camera.move(.{.x = 0, .y = move_y});
+      cursor_pos.y -= move_y;
+      
+      cursor_pos.y -= safe_area_h;
+    }
   
     ray.BeginDrawing(); {
       ray.ClearBackground(ray.RAYWHITE);
