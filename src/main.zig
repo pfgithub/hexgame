@@ -2,44 +2,75 @@ const std = @import("std");
 const ray = @import("raylib.zig");
 
 const TileEdges = [4]Tile; // ul ur bl br
-const Tile = enum{
-  grass,
-  dirt,
-  dark_dirt,
-  water,
+
+const Tile = enum(u32) {
   /// area that hasn't been loaded
-  unloaded,
+  unloaded = std.math.maxInt(u32) - 1,
   /// eg a tile could be [grass, grass, empty, empty] and it
   /// can be used for any transition involving [grass, grass, *, *]
   /// and it should pick which order to try * in based on this
   /// enum order probably so you don't end up with dirt above a grass
   /// transition
-  /// in addition to empty, there can be like a "any"
-  /// eg at the edge of the world you could make a neat effect
-  /// where it looks like a 3d pit but for any material, so
-  /// you need a tile that says "anything is above this"
-  any_above,
-  any_below,
+  any_below = std.math.maxInt(u32),
+  /// tiles are defined in the TileSet
+  _,
+  pub fn name(tile: Tile, set: TileSet) []const u8 {
+    return switch(tile) {
+      .unloaded => ".unloaded",
+      .any_below => ".any_below",
+      _ => |x| set.tiles.items[@enumToInt(x)].name,
+    };
+  }
 };
 
-const TileMap = struct {
+const TileSetKind = enum {
+  // each image is the center of four tiles
+  center_of_4,
+  // each image is its own tile, the surrounding
+  // tiles are used for automatic variant selection
+  surrounding_8,
+};
+const TileInfo = struct {
+  name: []const u8,
+};
+const TileSet = struct {
+  tiles: std.ArrayListUnmanaged(TileInfo),
+  variants: TileVariantMap,
+  kind: TileSetKind = .center_of_4,
+
+  pub fn new(alloc: *std.mem.Allocator) *TileSet {
+    var res = alloc.create(TileSet) catch @panic("oom");
+    res.* = .{
+      .variants = TileVariantMap.init(alloc),
+      .tiles = std.ArrayListUnmanaged(TileInfo){},
+    };
+    return res;
+  }
+  pub fn addTile(set: *TileSet, info: TileInfo) Tile {
+    const index = set.tiles.items.len;
+    set.tiles.append(set.variants.data.allocator, info) catch @panic("oom");
+    return @intToEnum(Tile, @intCast(u32, index));
+  }
+};
+const TileVariantMap = struct {
   const TileVariants = std.ArrayListUnmanaged(TileVariant);
   const TileVariant = struct {x: u16, y: u16};
+
   data: std.AutoHashMap(TileEdges, TileVariants),
 
-  fn init(alloc: *std.mem.Allocator) TileMap {
+  fn init(alloc: *std.mem.Allocator) TileVariantMap {
     return .{
       .data = std.AutoHashMap(TileEdges, TileVariants).init(alloc),
     };
   }
-  fn add(map: *TileMap, edges: TileEdges, values: []const TileVariant) void {
+  fn add(map: *TileVariantMap, edges: TileEdges, values: []const TileVariant) void {
     const entry = map.data.getOrPut(edges) catch @panic("oom");
     if(!entry.found_existing) {
       entry.value_ptr.* = std.ArrayListUnmanaged(TileVariant){};
     }
     entry.value_ptr.appendSlice(map.data.allocator, values) catch @panic("oom");
   }
-  fn get(map: TileMap, edges: TileEdges) []TileVariant {
+  fn get(map: TileVariantMap, edges: TileEdges) []TileVariant {
     // todo support air and variants and stuff
     const found = map.data.get(edges);
     if(found == null or found.?.items.len == 0) {
@@ -51,9 +82,9 @@ const TileMap = struct {
 
 // width: 24
 pub fn addFromData(
-  map: *TileMap,
+  map: *TileVariantMap,
   data: []const u8,
-  start: TileMap.TileVariant,
+  start: TileVariantMap.TileVariant,
   tiles: []const Tile,
 ) void {
   var pos = start;
@@ -70,7 +101,7 @@ pub fn addFromData(
     }
   }
 }
-pub fn add6x6(map: *TileMap, start: TileMap.TileVariant, tiles: [2]Tile) void {
+pub fn add6x6(map: *TileVariantMap, start: TileVariantMap.TileVariant, tiles: [2]Tile) void {
   const data = (
     \\1110,1100,1100,1100,1100,1101
     \\1010,0001,0010,0000,0000,0101
@@ -82,21 +113,31 @@ pub fn add6x6(map: *TileMap, start: TileMap.TileVariant, tiles: [2]Tile) void {
   addFromData(map, data, start, &tiles);
 }
 
-pub fn createTileMap(map: *TileMap) void {
-  add6x6(map, .{.x = 0, .y = 0}, .{.dirt, .grass});
-  add6x6(map, .{.x = 0, .y = 6}, .{.water, .grass});
-  add6x6(map, .{.x = 7, .y = 0}, .{.dark_dirt, .dirt});
-  add6x6(map, .{.x = 7, .y = 6}, .{.water, .dirt});
-  add6x6(map, .{.x = 13, .y = 0}, .{.dark_dirt, .grass});
-  add6x6(map, .{.x = 0, .y = 12}, .{.any_below, .grass});
-  add6x6(map, .{.x = 6, .y = 12}, .{.any_below, .dirt});
-  map.add(.{.grass, .grass, .grass, .grass}, &.{.{.x = 6, .y = 6}});
-  map.add(.{.unloaded, .unloaded, .unloaded, .unloaded}, &.{.{.x = 23, .y = 0}});
+pub fn createSampleSet(alloc: *std.mem.Allocator) *TileSet {
+  const set = TileSet.new(alloc);
+  
+  const grass = set.addTile(.{.name = "grass"});
+  const dirt = set.addTile(.{.name = "dirt"});
+  const water = set.addTile(.{.name = "water"});
+  const dark_dirt = set.addTile(.{.name = "dark_dirt"});
+
+  add6x6(&set.variants, .{.x = 0, .y = 0}, .{dirt, grass});
+  add6x6(&set.variants, .{.x = 0, .y = 6}, .{water, grass});
+  add6x6(&set.variants, .{.x = 7, .y = 0}, .{dark_dirt, dirt});
+  add6x6(&set.variants, .{.x = 7, .y = 6}, .{water, dirt});
+  add6x6(&set.variants, .{.x = 13, .y = 0}, .{dark_dirt, grass});
+  add6x6(&set.variants, .{.x = 0, .y = 12}, .{.any_below, grass});
+  add6x6(&set.variants, .{.x = 6, .y = 12}, .{.any_below, dirt});
+  set.variants.add(.{grass, grass, grass, grass}, &.{.{.x = 6, .y = 6}});
+  set.variants.add(.{.unloaded, .unloaded, .unloaded, .unloaded}, &.{.{.x = 23, .y = 0}});
+
   // would like to have everything→air in here, it'd be useful
   // also, to make this in-program rather than using
   // a fn like createTileMap, you would basically paint
   // the four corners of every tile with the chosen colors
   // it'd be wayy easier
+  
+  return set;
 }
 
 const TileSize = enum{
@@ -116,12 +157,23 @@ const Chunk = [128*128]Tile;
 const Surface = struct {
   alloc: *std.mem.Allocator,
   chunk: *Chunk,
+  
+  // TODO it needs to be possible to
+  // store information in every line and point
+  // on the grid. so point info would be eg
+  // variant selection, it can store "hey
+  //  you should select variant <> for this
+  //  midpoint"
+  // and for surrounding 8 you may want line
+  // info so eg "hey, for this line, use
+  // this color or smth
+  
   // contains chunks which have
   // a bunch of tiles and any associated tile
   // data if needed
   pub fn init(alloc: *std.mem.Allocator) Surface {
     const root_chunk = alloc.create(Chunk) catch @panic("oom");
-    for(root_chunk) |*tile| tile.* = .grass;
+    for(root_chunk) |*tile| tile.* = .any_below;
     return .{
       .alloc = alloc,
       .chunk = root_chunk,
@@ -205,7 +257,7 @@ pub fn renderSurface(
   camera: Camera,
   surface: Surface,
   dest: ray.Rectangle,
-  map: TileMap,
+  tile_set: *TileSet,
 ) void {
   const tile_step = camera.step();
   const range = camera.visibleTileRange(dest);
@@ -232,7 +284,7 @@ pub fn renderSurface(
       };
       
       const corners = surface.getCorners(.{xi, yi});
-      const variants = map.get(corners);
+      const variants = tile_set.variants.get(corners);
       if(variants.len > 0) {
         const variant = variants[0];
         const tile_src = ray.Rectangle{
@@ -256,7 +308,7 @@ pub fn renderSurface(
         // as that item.
         // (highest is highest in the enum)
         for(corners) |corner, i| {
-          const materials = map.get(.{corner, corner, corner, corner});
+          const materials = tile_set.variants.get(.{corner, corner, corner, corner});
           if(materials.len == 0) continue;
           const material = materials[0];
           const ix = @intToFloat(f32, i % 2);
@@ -287,15 +339,14 @@ pub fn renderSurface(
 
 pub fn main() !void {
   const alloc = std.heap.page_allocator;
-  
-  var tile_map = TileMap.init(alloc);
-  createTileMap(&tile_map);
 
   const window_w = 800;
   const window_h = 450;
   ray.InitWindow(window_w, window_h, "sample");
   
   const texture = ray.LoadTexture("src/img/sheet_19.png");
+  const tile_set = createSampleSet(alloc);
+  
   const cursor = ray.LoadTexture("src/img/image0004.png");
   
   ray.SetTargetFPS(60);
@@ -364,14 +415,14 @@ pub fn main() !void {
     }
   
     ray.BeginDrawing(); {
-      ray.ClearBackground(ray.RAYWHITE);
+      ray.ClearBackground(ray.GRAY);
       
       renderSurface(
         texture,
         camera,
         surface,
         .{.x = 0, .y = 0, .width = window_w, .height = window_h},
-        tile_map,
+        tile_set,
       );
 
       const m_screen_pos: ray.Vector2 = .{
@@ -379,7 +430,7 @@ pub fn main() !void {
         .y = (window_h / 2) + cursor_pos.y,
       };
       _ = cursor;
-      if(false) ray._wDrawTexturePro(
+      if(true) ray._wDrawTexturePro(
         &cursor,
         &.{.x = 0, .y = 0, .width = 64, .height = 64},
         &.{.x = m_screen_pos.x - (64 / 2), .y = m_screen_pos.y - (64 / 2), .width = 64, .height = 64},
@@ -406,17 +457,20 @@ pub fn main() !void {
       );
       
       ray.DrawText(std.fmt.allocPrint0(arena,
-        "{}\n{}",
-        .{m_world_pos, surface.getTile(m_world_pos)},
+        "{}\n{s}",
+        .{m_world_pos, surface.getTile(m_world_pos).name(tile_set.*)},
       ) catch @panic("oom"), 10, 10, 20, ray.WHITE);
       
       if(ray.IsMouseButtonPressed(ray.MOUSE_BUTTON_LEFT)) {
         const ctile = surface.getTile(m_world_pos);
-        const ntile: Tile = switch(ctile) {
-          .grass => .dirt,
-          .dirt => .water,
-          .water => .any_below,
-          else => .grass,
+        const ntile = switch(ctile) {
+          .any_below => @intToEnum(Tile, 0),
+          .unloaded => .any_below,
+          else => blk: {
+            const x = @enumToInt(ctile);
+            if(x + 1 == tile_set.tiles.items.len) break :blk .any_below;
+            break :blk @intToEnum(Tile, x + 1);
+          },
         };
         if(!surface.setTile(m_world_pos, ntile)) {
           std.log.info("Could not set tile", .{});
