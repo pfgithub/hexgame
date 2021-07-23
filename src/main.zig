@@ -22,6 +22,7 @@ const Tile = enum{
   farmland_1,
   farmland_2,
   farmland_3,
+  tile_highlight,
   pub fn toMiniCoords(tile: Tile) ray.Rectangle {
     const index: f32 = @intToFloat(f32, @enumToInt(tile));
     const x = 1 + @mod(index, 7) * (15 + 1);
@@ -31,11 +32,108 @@ const Tile = enum{
   }
 };
 
-const Scale = enum{
+const TileSize = enum{
   nano,
   micro,
   mini,
+  pub fn step(_: TileSize, scale: f32) TileStep {
+    return .{
+      .x = 14 * scale,
+      .y = 9 * scale,
+      .w = 15 * scale,
+      .h = 18 * scale,
+      .mid = 7 * scale,
+      .top = 5 * scale,
+    };
+  }
 };
+
+const TileStep = struct {
+  x: f32,
+  y: f32,
+  w: f32,
+  h: f32,
+  mid: f32,
+  top: f32,
+};
+
+const Surface = struct {
+  // contains chunks which have
+  // a bunch of tiles and any associated tile
+  // data if needed
+  pub fn getTile(_: Surface, pos: TilePos) Tile {
+    if(@mod(pos.x, 4) == 0 and @mod(pos.y, 5) <= 2) {
+      return Tile.water;
+    }
+    return Tile.grassland;
+  }
+};
+
+const TilePos = struct {
+  x: i32,
+  y: i32,
+};
+const TileRect = struct {
+  x: i32,
+  y: i32,
+  w: i32,
+  h: i32,
+};
+
+const Camera = struct {
+  pixel_size: f32,
+  tile_size: TileSize,
+  pixel_offset: ray.Vector2,
+  
+  pub fn move(camera: *Camera, offset: ray.Vector2) void {
+    camera.pixel_offset.x += offset.x;
+    camera.pixel_offset.y += offset.y;
+  }
+  pub fn step(camera: Camera) TileStep {
+    return camera.tile_size.step(camera.pixel_size);
+  }
+  pub fn visibleTileRange(camera: Camera, dest: ray.Rectangle) TileRect {
+    const tile_step = camera.step();
+    const x_count = @floatToInt(i32, @ceil(dest.width / tile_step.x));
+    const y_count = @floatToInt(i32, @ceil(dest.height / tile_step.y));
+    return .{.x = 0 - 1, .y = 0 - 1, .w = x_count + 2, .h = y_count + 2};
+  }
+};
+
+pub fn renderSurface(texture: ray.Texture2D, camera: Camera, surface: Surface, dest: ray.Rectangle) void {
+  const tile_step = camera.step();
+  const range = camera.visibleTileRange(dest);
+
+  var yi: i32 = range.y;
+  while(yi < range.y + range.w) : (yi += 1) {
+    var xi: i32 = range.x;
+    while(xi < range.x + range.w) : (xi += 1) {
+    
+      var x = @intToFloat(f32, xi) * tile_step.x;
+      var y = @intToFloat(f32, yi) * tile_step.y;
+      
+      if(@mod(yi, 2) == 1) {
+        x += tile_step.mid;
+      }
+      
+      x -= camera.pixel_offset.x;
+      y -= camera.pixel_offset.y;
+
+      x -= dest.x;
+      y -= dest.y;
+      
+      const tile_src = surface.getTile(.{.x = xi, .y = yi}).toMiniCoords();
+      ray._wDrawTexturePro(
+        &texture,
+        &tile_src,
+        &.{.x = x, .y = y - tile_step.top, .width = tile_step.w, .height = tile_step.h},
+        &.{.x = 0, .y = 0},
+        0,
+        &ray.WHITE,
+      );
+    }
+  }
+}
 
 pub fn main() !void {
   const window_w = 800;
@@ -49,43 +147,26 @@ pub fn main() !void {
   
   ray.DisableCursor();
   
+  var surface = Surface{};
+  var camera = Camera{
+    .pixel_size = 4,
+    .tile_size = .mini,
+    .pixel_offset = .{.x = 0, .y = 0},
+  };
+  
+  var prev_pos = ray.GetMousePosition();
+  
   while(!ray.WindowShouldClose()) {
-    const offset = ray.GetMousePosition();
+    const curr_pos = ray.GetMousePosition();
+    const offset = ray.Vector2{.x = curr_pos.x - prev_pos.x, .y = curr_pos.y - prev_pos.y};
+    prev_pos = curr_pos;
+    
+    camera.move(offset);
   
     ray.BeginDrawing(); {
       ray.ClearBackground(ray.RAYWHITE);
       
-      const scale = 4;
-      var yi: usize = 0;
-      var i: u5 = 0;
-      while(yi < 10) : (yi += 1) {
-        var xi: usize = 0;
-        while(xi < 10) : (xi += 1) {
-        
-          var x = @intToFloat(f32, xi * 15 * scale);
-          var y = @intToFloat(f32, yi * 9 * scale);
-          
-          if(yi % 2 == 1) {
-            x += 7 * scale;
-          }
-          
-          x -= offset.x;
-          y -= offset.y;
-          
-          const tile_coords = @intToEnum(Tile, i).toMiniCoords();
-          ray._wDrawTexturePro(
-            &texture,
-            &tile_coords,
-            &.{.x = x, .y = y - (5 * scale), .width = 15 * scale, .height = 18 * scale},
-            &.{.x = 0, .y = 0},
-            0,
-            &ray.WHITE,
-          );
-          
-          i +%= 1;
-          i %= @as(comptime_int, std.meta.fields(Tile).len);
-        }
-      }
+      renderSurface(texture, camera, surface, .{.x = 0, .y = 0, .width = window_w, .height = window_h});
 
       ray._wDrawTexturePro(
         &cursor,
