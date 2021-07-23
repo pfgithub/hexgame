@@ -15,9 +15,22 @@ pub fn build(b: *std.build.Builder) void {
     exe.setTarget(target);
     exe.setBuildMode(mode);
     exe.linkLibC();
-    exe.addIncludeDir("deps/");
-    exe.addObjectFile("deps/libraylib.a");
-    exe.addIncludeDir("src/raylib");
+    
+    if(true) {
+        exe.addIncludeDir("deps/");
+        exe.addObjectFile("deps/libraylib.a");
+        exe.addIncludeDir("src/raylib");
+        
+        if(target.isDarwin()) {
+            exe.linkFramework("CoreVideo");
+            exe.linkFramework("IOKit");
+            exe.linkFramework("Cocoa");
+            exe.linkFramework("GLUT");
+            exe.linkFramework("OpenGL");
+        }
+    }else{
+        exe.linkSystemLibrary("raylib");
+    }
     //exe.addCSourceFile("src/raylib/workaround.h", &.{"-Dworkaround_implementation"}); // it crashes? idk why
     exe.addCSourceFile("src/raylib/workaround.c", &.{});
     exe.install();

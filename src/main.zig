@@ -309,7 +309,7 @@ pub fn main() !void {
     .pixel_offset = .{.x = 0, .y = 0},
   };
   
-  var prev_pos = ray.GetMousePosition();
+  var prev_pos = ray.wGetMousePosition();
   var cursor_pos: ray.Vector2 = .{.x = 0, .y = 0};
   
   while(!ray.WindowShouldClose()) {
@@ -317,7 +317,7 @@ pub fn main() !void {
     const arena = &frame_arena.allocator;
     _ = arena;
   
-    const curr_pos = ray.GetMousePosition();
+    const curr_pos = ray.wGetMousePosition();
     const offset = ray.Vector2{.x = curr_pos.x - prev_pos.x, .y = curr_pos.y - prev_pos.y};
     prev_pos = curr_pos;
     

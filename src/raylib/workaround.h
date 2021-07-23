@@ -22,3 +22,9 @@ void _wDrawRectangleRec(
 ) IMPL({
 	DrawRectangleRec(*rec, *color);
 })
+
+void _wGetMousePosition(
+	Vector2* out
+) IMPL({
+	*out = GetMousePosition();
+})
