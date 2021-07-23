@@ -1,1 +1,3 @@
+colony_0: https://opengameart.org/content/colony-sim-assets
+sheet_17: https://opengameart.org/content/top-down-dungeon-tileset
 sheet_19: https://opengameart.org/content/outdoor-tiles-again
