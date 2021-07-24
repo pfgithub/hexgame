@@ -440,14 +440,30 @@ pub fn main() !void {
       
       cursor_pos.y -= pan_safe_area_h;
     }
-    // glhf scrolling on trackpad
-    //if(ray.GetMouseWheelMove() < 0) {
-    //  hotbar_selection += 1;
-    //  hotbar_selection %= hotbar_items.len;
-    //}else if(ray.GetMouseWheelMove() > 0) {
-    //  if(hotbar_selection == 0) hotbar_selection = hotbar_items.len;
-    //  hotbar_selection -= 1;
-    //}
+    if(ray.IsKeyPressed(ray.KEY_LEFT_BRACKET)) {
+      if(hotbar_selection == 0) hotbar_selection = hotbar_items.len;
+      hotbar_selection -= 1;
+    }else if(ray.IsKeyPressed(ray.KEY_RIGHT_BRACKET)) {
+      hotbar_selection += 1;
+      hotbar_selection %= hotbar_items.len;
+    }
+    
+    for([_]c_int{
+      ray.KEY_ONE,
+      ray.KEY_TWO,
+      ray.KEY_THREE,
+      ray.KEY_FOUR,
+      ray.KEY_FIVE,
+      ray.KEY_SIX,
+      ray.KEY_SEVEN,
+      ray.KEY_EIGHT,
+      ray.KEY_NINE,
+      ray.KEY_ZERO,
+    }) |key, i| {
+      if(hotbar_items.len > i and ray.IsKeyPressed(key)) {
+        hotbar_selection = i;
+      }
+    }
     
     const m_screen_pos: ray.Vector2 = .{
       .x = (window_w / 2) + cursor_pos.x,
@@ -458,6 +474,7 @@ pub fn main() !void {
     if(scroll != 0) {
       var start_c = camera.screenToWorld(m_screen_pos);
       camera.pixel_offset = .{.x = 0, .y = 0};
+      // glhf zooming on trackpad
       camera.pixel_size *= if(scroll > 0) @as(f32, 2) else 0.5;
       if(camera.pixel_size < 0.5) camera.pixel_size = 0.5;
       camera.pixel_offset = camera.worldToScreen(start_c);
