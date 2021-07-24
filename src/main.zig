@@ -441,12 +441,30 @@ pub fn main() !void {
       cursor_pos.y -= pan_safe_area_h;
     }
     // glhf scrolling on trackpad
-    if(ray.GetMouseWheelMove() < 0) {
-      hotbar_selection += 1;
-      hotbar_selection %= hotbar_items.len;
-    }else if(ray.GetMouseWheelMove() > 0) {
-      if(hotbar_selection == 0) hotbar_selection = hotbar_items.len;
-      hotbar_selection -= 1;
+    //if(ray.GetMouseWheelMove() < 0) {
+    //  hotbar_selection += 1;
+    //  hotbar_selection %= hotbar_items.len;
+    //}else if(ray.GetMouseWheelMove() > 0) {
+    //  if(hotbar_selection == 0) hotbar_selection = hotbar_items.len;
+    //  hotbar_selection -= 1;
+    //}
+    
+    const m_screen_pos: ray.Vector2 = .{
+      .x = (window_w / 2) + cursor_pos.x,
+      .y = (window_h / 2) + cursor_pos.y,
+    };
+    const scroll = ray.GetMouseWheelMove();
+    
+    if(scroll != 0) {
+      var start_c = camera.screenToWorld(m_screen_pos);
+      camera.pixel_offset = .{.x = 0, .y = 0};
+      camera.pixel_size *= if(scroll > 0) @as(f32, 2) else 0.5;
+      if(camera.pixel_size < 0.5) camera.pixel_size = 0.5;
+      camera.pixel_offset = camera.worldToScreen(start_c);
+      camera.pixel_offset.x -= m_screen_pos.x;
+      camera.pixel_offset.y -= m_screen_pos.y;
+      camera.pixel_offset.x = @floor(camera.pixel_offset.x);
+      camera.pixel_offset.y = @floor(camera.pixel_offset.y);
     }
   
     ray.BeginDrawing(); {
@@ -460,11 +478,6 @@ pub fn main() !void {
         tile_set,
       );
 
-      const m_screen_pos: ray.Vector2 = .{
-        .x = (window_w / 2) + cursor_pos.x,
-        .y = (window_h / 2) + cursor_pos.y,
-      };
-      _ = cursor;
       if(true) ray._wDrawTexturePro(
         &cursor,
         &.{.x = 0, .y = 0, .width = 64, .height = 64},
