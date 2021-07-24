@@ -51,6 +51,15 @@ const TileSet = struct {
     set.tiles.append(set.variants.data.allocator, info) catch @panic("oom");
     return @intToEnum(Tile, @intCast(u32, index));
   }
+  pub fn fromString(set: TileSet, str: []const u8) ?Tile {
+    // n² when fromString is called in a loop, oops
+    for(set.tiles.items) |tile, i| {
+      if(std.mem.eql(u8, str, tile.name)) {
+        return @intToEnum(Tile, @intCast(u32, i));
+      }
+    }
+    return null;
+  }
 };
 const TileVariantMap = struct {
   const TileVariants = std.ArrayListUnmanaged(TileVariant);
@@ -153,6 +162,59 @@ const TileSize = enum{
 };
 
 const Chunk = [128*128]Tile;
+
+fn loadChunk(text: []const u8, tileset: *TileSet, chunk: *Chunk, alloc: *std.mem.Allocator) !void {
+  var components = std.mem.split(text, "----\n");
+  {
+    const header = components.next() orelse return error.Corrupted;
+    if(!std.mem.eql(u8, header, "chunk-v1\n")) {
+      std.log.err("Chunk is for unsupported version", .{});
+      return error.BadVersion;
+    }
+  }
+  var final_map = std.ArrayList(Tile).init(alloc);
+  defer final_map.deinit();
+  {
+    var mappings = std.mem.split(components.next() orelse return error.Corrupted, "\n");
+    while(mappings.next()) |str| {
+      if(str.len == 0) break;
+      final_map.append(tileset.fromString(str) orelse {
+        std.log.emerg("Missing tile to load chunk `{s}`", .{str});
+        return error.MissingTiles;
+      }) catch @panic("oom");
+    }
+  }
+  {
+    var chunk_data = std.mem.tokenize(components.next() orelse return error.Corrupted, ",\n");
+    var i: usize = 0;
+    while(chunk_data.next()) |tile_idx_str| : (i += 1) {
+      if(tile_idx_str.len == 0) break;
+      const tile_idx = @bitCast(u32, std.fmt.parseInt(i32, tile_idx_str, 16) catch return error.Corrupted);
+      if(tile_idx == std.math.maxInt(u32)) {
+        chunk[i] = .any_below;
+        continue;
+      }
+      if(tile_idx >= final_map.items.len) return error.Corrupted;
+      const tile = final_map.items[tile_idx];
+      chunk[i] = tile;
+    }
+    if(i != 128*128) return error.Corrupted;
+  }
+}
+fn saveChunk(chunk: Chunk, tileset: *TileSet, out: anytype) void {
+  const separator = "----\n";
+  out.print("chunk-v1\n", .{}) catch @panic("oom");
+  out.writeAll(separator) catch @panic("oom");
+  for(tileset.tiles.items) |tile| {
+    out.print("{s}\n", .{tile.name}) catch @panic("oom");
+  }
+  out.writeAll(separator) catch @panic("oom");
+  for(chunk) |tile, i| {
+    out.print("{x}", .{@bitCast(i32, @enumToInt(tile))}) catch @panic("oom");
+    if(i % 128 == 127) out.writeAll("\n") catch @panic("oom") //
+    else out.writeAll(",") catch @panic("oom");
+  }
+}
 
 const Surface = struct {
   alloc: *std.mem.Allocator,
@@ -368,6 +430,20 @@ pub fn main() !void {
     .tile_size = .mini,
     .pixel_offset = .{.x = 0, .y = 0},
   };
+  
+  blk: {
+    std.log.info("Loading chunk…", .{});
+    const saved_chunk = std.fs.cwd().readFileAlloc(alloc, "./saved_chunk.tgc", std.math.maxInt(usize)) catch |err| {
+      std.log.info("Load chunk error {}", .{err});
+      break :blk;
+    };
+    defer alloc.free(saved_chunk);
+    loadChunk(saved_chunk, tile_set, surface.chunk, alloc) catch |err| {
+      std.log.emerg("Chunk is corrupted {}", .{err});
+      @panic("Chunk corrupted");
+    };
+    std.log.info("✓ Loaded", .{});
+  }
   
   var prev_pos = ray.wGetMousePosition();
   var cursor_pos: ray.Vector2 = .{.x = 0, .y = 0};
@@ -592,6 +668,18 @@ pub fn main() !void {
         }
       }
     } ray.EndDrawing();
+  }
+  
+  {
+    var out_w = std.ArrayList(u8).init(alloc);
+    defer out_w.deinit();
+    
+    const out = out_w.writer();
+    saveChunk(surface.chunk.*, tile_set, out);
+    
+    std.log.info("Saving chunk…", .{});
+    try std.fs.cwd().writeFile("./saved_chunk.tgc", out_w.items);
+    std.log.info("✓ Saved", .{});
   }
 }
 
