@@ -252,6 +252,63 @@ const Camera = struct {
   }
 };
 
+pub fn renderTile(
+  texture: ray.Texture2D,
+  tile_pos: ray.Rectangle,
+  corners: TileEdges,
+  tile_set: *TileSet,
+) void {
+  const variants = tile_set.variants.get(corners);
+  if(variants.len > 0) {
+    const variant = variants[0];
+    const tile_src = ray.Rectangle{
+      .x = @intToFloat(f32, variant.x) * 16,
+      .y = @intToFloat(f32, variant.y) * 16,
+      .width = 16,
+      .height = 16,
+    };
+    ray._wDrawTexturePro(
+      &texture,
+      &tile_src,
+      &tile_pos,
+      &.{.x = 0, .y = 0},
+      0,
+      &ray.WHITE,
+    );
+  }else{
+    // TODO in order of highest to lowest, try rendering
+    // each layer as only the current layer + air tiles
+    // and then for the bottom layer, render all four corners
+    // as that item.
+    // (highest is highest in the enum)
+    for(corners) |corner, i| {
+      const materials = tile_set.variants.get(.{corner, corner, corner, corner});
+      if(materials.len == 0) continue;
+      const material = materials[0];
+      const ix = @intToFloat(f32, i % 2);
+      const iy = @intToFloat(f32, i / 2);
+      ray._wDrawTexturePro(
+        &texture,
+        &ray.Rectangle{
+          .x = @intToFloat(f32, material.x) * 16 + (ix * 8),
+          .y = @intToFloat(f32, material.y) * 16 + (iy * 8),
+          .width = 8,
+          .height = 8,
+        },
+        &.{
+          .x = tile_pos.x + (ix * (tile_pos.width / 2)),
+          .y = tile_pos.y + (iy * (tile_pos.height / 2)),
+          .width = tile_pos.width / 2,
+          .height = tile_pos.height / 2,
+        },
+        &.{.x = 0, .y = 0},
+        0,
+        &ray.WHITE,
+      );
+    }
+  }
+}
+
 pub fn renderSurface(
   texture: ray.Texture2D,
   camera: Camera,
@@ -284,55 +341,7 @@ pub fn renderSurface(
       };
       
       const corners = surface.getCorners(.{xi, yi});
-      const variants = tile_set.variants.get(corners);
-      if(variants.len > 0) {
-        const variant = variants[0];
-        const tile_src = ray.Rectangle{
-          .x = @intToFloat(f32, variant.x) * 16,
-          .y = @intToFloat(f32, variant.y) * 16,
-          .width = 16,
-          .height = 16,
-        };
-        ray._wDrawTexturePro(
-          &texture,
-          &tile_src,
-          &tile_pos,
-          &.{.x = 0, .y = 0},
-          0,
-          &ray.WHITE,
-        );
-      }else{
-        // TODO in order of highest to lowest, try rendering
-        // each layer as only the current layer + air tiles
-        // and then for the bottom layer, render all four corners
-        // as that item.
-        // (highest is highest in the enum)
-        for(corners) |corner, i| {
-          const materials = tile_set.variants.get(.{corner, corner, corner, corner});
-          if(materials.len == 0) continue;
-          const material = materials[0];
-          const ix = @intToFloat(f32, i % 2);
-          const iy = @intToFloat(f32, i / 2);
-          ray._wDrawTexturePro(
-            &texture,
-            &ray.Rectangle{
-              .x = @intToFloat(f32, material.x) * 16 + (ix * 8),
-              .y = @intToFloat(f32, material.y) * 16 + (iy * 8),
-              .width = 8,
-              .height = 8,
-            },
-            &.{
-              .x = tile_pos.x + (ix * (tile_step.x / 2)),
-              .y = tile_pos.y + (iy * (tile_step.y / 2)),
-              .width = tile_pos.width / 2,
-              .height = tile_pos.height / 2,
-            },
-            &.{.x = 0, .y = 0},
-            0,
-            &ray.WHITE,
-          );
-        }
-      }
+      renderTile(texture, tile_pos, corners, tile_set);
     }
   }
 }
@@ -363,6 +372,27 @@ pub fn main() !void {
   var prev_pos = ray.wGetMousePosition();
   var cursor_pos: ray.Vector2 = .{.x = 0, .y = 0};
   
+  
+  // settings
+  const hotbar_items = &[_]Tile{
+    @intToEnum(Tile, 0),
+    @intToEnum(Tile, 1),
+    @intToEnum(Tile, 2),
+    @intToEnum(Tile, 3),
+  };
+  var hotbar_selection: usize = 0;
+  const hotbar_item_width = 16 * 3;
+  const hotbar_item_height = 16 * 3;
+  const hotbar_spacing = 12;
+  const hotbar_selector_size = 8;
+  const hotbar_border_radius: f32 = 10;
+  const hotbar_mode = false;
+  
+  const pan_speed = 1;
+  const pan_safe_area_w = 0;
+  const pan_safe_area_h = 0;
+
+  
   while(!ray.WindowShouldClose()) {
     var frame_arena = std.heap.ArenaAllocator.init(alloc);
     const arena = &frame_arena.allocator;
@@ -374,44 +404,49 @@ pub fn main() !void {
     
     cursor_pos.x += offset.x;
     cursor_pos.y += offset.y;
-    const speed = 0.2;
-    const safe_area_w = window_w / 3;
-    const safe_area_h = window_h / 3;
-    if(cursor_pos.x > safe_area_w) {
-      cursor_pos.x -= safe_area_w;
+    if(cursor_pos.x > pan_safe_area_w) {
+      cursor_pos.x -= pan_safe_area_w;
       
-      const move_x = @ceil(cursor_pos.x * speed);
+      const move_x = @ceil(cursor_pos.x * pan_speed);
       camera.move(.{.x = move_x, .y = 0});
       cursor_pos.x -= move_x;
       
-      cursor_pos.x += safe_area_w;
+      cursor_pos.x += pan_safe_area_w;
     }
-    if(cursor_pos.y > safe_area_h) {
-      cursor_pos.y -= safe_area_h;
+    if(cursor_pos.y > pan_safe_area_h) {
+      cursor_pos.y -= pan_safe_area_h;
       
-      const move_y = @ceil(cursor_pos.y * speed);
+      const move_y = @ceil(cursor_pos.y * pan_speed);
       camera.move(.{.x = 0, .y = move_y});
       cursor_pos.y -= move_y;
       
-      cursor_pos.y += safe_area_h;
+      cursor_pos.y += pan_safe_area_h;
     }
-    if(cursor_pos.x < -safe_area_w) {
-      cursor_pos.x += safe_area_w;
+    if(cursor_pos.x < -pan_safe_area_w) {
+      cursor_pos.x += pan_safe_area_w;
       
-      const move_x = @ceil(cursor_pos.x * speed);
+      const move_x = @ceil(cursor_pos.x * pan_speed);
       camera.move(.{.x = move_x, .y = 0});
       cursor_pos.x -= move_x;
       
-      cursor_pos.x -= safe_area_w;
+      cursor_pos.x -= pan_safe_area_w;
     }
-    if(cursor_pos.y < -safe_area_h) {
-      cursor_pos.y += safe_area_h;
+    if(cursor_pos.y < -pan_safe_area_h) {
+      cursor_pos.y += pan_safe_area_h;
       
-      const move_y = @ceil(cursor_pos.y * speed);
+      const move_y = @ceil(cursor_pos.y * pan_speed);
       camera.move(.{.x = 0, .y = move_y});
       cursor_pos.y -= move_y;
       
-      cursor_pos.y -= safe_area_h;
+      cursor_pos.y -= pan_safe_area_h;
+    }
+    // glhf scrolling on trackpad
+    if(ray.GetMouseWheelMove() < 0) {
+      hotbar_selection += 1;
+      hotbar_selection %= hotbar_items.len;
+    }else if(ray.GetMouseWheelMove() > 0) {
+      if(hotbar_selection == 0) hotbar_selection = hotbar_items.len;
+      hotbar_selection -= 1;
     }
   
     ray.BeginDrawing(); {
@@ -461,19 +496,69 @@ pub fn main() !void {
         .{m_world_pos, surface.getTile(m_world_pos).name(tile_set.*)},
       ) catch @panic("oom"), 10, 10, 20, ray.WHITE);
       
-      if(ray.IsMouseButtonPressed(ray.MOUSE_BUTTON_LEFT)) {
-        const ctile = surface.getTile(m_world_pos);
-        const ntile = switch(ctile) {
-          .any_below => @intToEnum(Tile, 0),
-          .unloaded => .any_below,
-          else => blk: {
-            const x = @enumToInt(ctile);
-            if(x + 1 == tile_set.tiles.items.len) break :blk .any_below;
-            break :blk @intToEnum(Tile, x + 1);
-          },
-        };
+      if(ray.IsMouseButtonDown(ray.MOUSE_BUTTON_LEFT)) {
+        const ntile = hotbar_items[hotbar_selection];
         if(!surface.setTile(m_world_pos, ntile)) {
           std.log.info("Could not set tile", .{});
+        }
+      }else if(ray.IsMouseButtonDown(ray.MOUSE_BUTTON_RIGHT)) {
+        if(!surface.setTile(m_world_pos, .any_below)) {
+          std.log.info("Could not set tile", .{});
+        }
+      }
+      
+      const hotbar_width: f32 = hotbar_items.len * (hotbar_item_width + hotbar_spacing) + hotbar_spacing;
+      const hotbar_height: f32 = hotbar_item_height + hotbar_spacing * 2;
+      const hotbar_left: f32 = window_w / 2 - hotbar_width / 2;
+      const hotbar_top = window_h - hotbar_height;
+      ray._wDrawRectangleRounded(&.{
+        .x = hotbar_left,
+        .y = hotbar_top,
+        .width = hotbar_width,
+        .height = hotbar_height + 100,
+      }, &hotbar_border_radius, &.{.r = 240, .g = 240, .b = 240, .a = 240});
+      {
+        const selection_x = (
+          @intToFloat(f32, hotbar_selection) * (hotbar_item_width + hotbar_spacing)
+          + hotbar_spacing + hotbar_left
+        );
+        ray._wDrawRectangleRounded(&.{
+          .x = selection_x - hotbar_spacing,
+          .y = hotbar_top - hotbar_selector_size,
+          .width = hotbar_item_width + 2 * hotbar_spacing,
+          .height = hotbar_height + 100,
+        }, &hotbar_border_radius, &.{.r = 255, .g = 255, .b = 255, .a = 255});
+      }
+      for(hotbar_items) |item, i| {
+        const item_x = @intToFloat(f32, i) * (hotbar_item_width + hotbar_spacing) + hotbar_spacing + hotbar_left;
+        var item_y = hotbar_top + hotbar_spacing;
+        if(i == hotbar_selection) item_y -= hotbar_selector_size;
+        
+        if(hotbar_mode) {
+          const whalf = hotbar_item_width / 2;
+          const hhalf = hotbar_item_height / 2;
+          
+          renderTile(texture, .{
+            .x = item_x - whalf, .y = item_y - hhalf,
+            .width = hotbar_item_width, .height = hotbar_item_height,
+          }, .{.any_below, .any_below, .any_below, item}, tile_set);
+          renderTile(texture, .{
+            .x = item_x + whalf, .y = item_y - hhalf,
+            .width = hotbar_item_width, .height = hotbar_item_height,
+          }, .{.any_below, .any_below, item, .any_below}, tile_set);
+          renderTile(texture, .{
+            .x = item_x - whalf, .y = item_y + hhalf,
+            .width = hotbar_item_width, .height = hotbar_item_height,
+          }, .{.any_below, item, .any_below, .any_below}, tile_set);
+          renderTile(texture, .{
+            .x = item_x + whalf, .y = item_y + hhalf,
+            .width = hotbar_item_width, .height = hotbar_item_height,
+          }, .{item, .any_below, .any_below, .any_below}, tile_set);
+        }else{
+          renderTile(texture, .{
+            .x = item_x, .y = item_y,
+            .width = hotbar_item_width, .height = hotbar_item_height,
+          }, .{item, item, item, item}, tile_set);
         }
       }
     } ray.EndDrawing();
