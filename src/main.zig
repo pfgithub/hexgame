@@ -389,8 +389,8 @@ pub fn main() !void {
   const hotbar_mode = false;
   
   const pan_speed = 1;
-  const pan_safe_area_w = 0;
-  const pan_safe_area_h = 0;
+  const pan_safe_area_w = window_w / 2;
+  const pan_safe_area_h = window_h / 2;
 
   
   while(!ray.WindowShouldClose()) {
