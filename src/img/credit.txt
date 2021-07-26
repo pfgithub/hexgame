@@ -1,5 +1,17 @@
 1sttileset: https://opengameart.org/content/overworld-tiles-1
+cave: https://opengameart.org/content/cave-tileset-0
 colony_0: https://opengameart.org/content/colony-sim-assets
+dirt-tiles: https://opengameart.org/content/old-frogatto-tile-art
+dungeon tileset calciumtrice: https://opengameart.org/content/dungeon-tileset-1
+dungeon_sheet_0: https://opengameart.org/content/a-blocky-dungeon
+dungeon_tiles_0: https://opengameart.org/content/dungeon-tileset
 overworld_1: https://opengameart.org/content/overworld-tiles-0
+Overworld: https://opengameart.org/content/zelda-like-tilesets-and-sprites
+sewer_1: https://opengameart.org/content/sewer-tileset
+sheet_9: https://opengameart.org/content/a-platformer-in-the-forest
 sheet_17: https://opengameart.org/content/top-down-dungeon-tileset
 sheet_19: https://opengameart.org/content/outdoor-tiles-again
+terrain: https://opengameart.org/content/tiled-terrains
+tiles_packed: https://opengameart.org/content/pixel-shmup
+tileset: https://opengameart.org/content/magic-cliffs-environment
+tileset_1_*: https://opengameart.org/content/worldmapoverworld-tileset
