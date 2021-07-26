@@ -1,3 +1,5 @@
+1sttileset: https://opengameart.org/content/overworld-tiles-1
 colony_0: https://opengameart.org/content/colony-sim-assets
+overworld_1: https://opengameart.org/content/overworld-tiles-0
 sheet_17: https://opengameart.org/content/top-down-dungeon-tileset
 sheet_19: https://opengameart.org/content/outdoor-tiles-again
