@@ -1,11 +1,12 @@
 pub usingnamespace @cImport({
-  @cInclude("raylib.h");
-  @cInclude("workaround.h");
+    @cInclude("raylib.h");
+    @cInclude("workaround.h");
 });
+const c = @This();
 
 // undefine GetMousePosition
-pub fn wGetMousePosition() Vector2 {
-  var res: Vector2 = undefined;
-  _wGetMousePosition(&res);
-  return res;
+pub fn wGetMousePosition() c.Vector2 {
+    var res: c.Vector2 = undefined;
+    c._wGetMousePosition(&res);
+    return res;
 }
