@@ -422,7 +422,7 @@ pub fn main() !void {
 
     const cursor = ray.LoadTexture("src/img/image0004.png");
 
-    ray.SetTargetFPS(60);
+    ray.SetTargetFPS(240);
 
     ray.DisableCursor();
 
